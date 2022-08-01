@@ -5,23 +5,29 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from pprint import pprint
 from vkt_bot_candidates import VkRequest
 from vkt_bot_config import token, token_bot, vk_version
+import re
 
-
+# club_url = 'https://vk.com/club214720213'
 vk_item_main = VkRequest(token, vk_version)
+pattern = r'^([мж]|муж[.скойчина]{0,4}|жен[.скийщна]{0,4})[\s,]{1,2}' \
+          '(\d{2,3})[ ,-]+' \
+          '(\d{2,3})[ ,]+' \
+          '([а-яё]{2,}(?:[ -]*\w+){2})\s*$'
 inviting_text = 'Предлагаю поискать варианты для новых отношений (нажмите на кнопку)'
+
+
 search_button_text = 'Поиск'
-search_age_city_text = 'Ввведите через пробел желаемый диапазон возраста (в годах) и город, ' \
-                       'в котором искать. Например:\n20 25 Нижний Новгород'
+search_query_text = 'Ввведите через пробел данные того, о ком грезите:\n' \
+                    'пол (м/ж)\n' \
+                    'желаемый диапазон возраста в годах (от и до)\n' \
+                    'и город, в котором искать. Например:\nж 20 25 Нижний Новгород'
 help_text = "'Поиск' - новый поиск\n"\
             "'Следующий' - перейти к следующему\n" \
             "'В избранное' - добавить в избранное\n" \
             "'Список' - вывести список избранных"
-
 quit_button_text = 'Выйти'
-male_button_text = 'Мужика бы мне'
-female_button_text = 'Женщину хочу'
 
-# club_url = 'https://vk.com/club214720213'
+
 
 vk = VkApiGroup(token=token_bot)
 longpoll = VkLongPoll(vk)
@@ -37,8 +43,8 @@ def send_msg(user_id, message, keyboard=None, attachment=None):
         print('attachment', params['attachment'])
 
     vk.method('messages.send', params)
-    # pprint(params)
-    # print(f'< to user_id = {user_id} отправлено сообщение> {message}')
+    pprint(params)
+    print(f'< to user_id = {user_id} отправлено сообщение> {message}')
 
 def get_user_info(user_id):
     return vk.method('users.get', {'user_ids': user_id, 'fields': 'sex, city, bdate'})[0]
@@ -50,29 +56,27 @@ def create_button(text, color=VkKeyboardColor.SECONDARY):
               'white': VkKeyboardColor.SECONDARY}
     kb.add_button(text, colors[color])
 
-
-def get_age_city_data(request):
-    try:
-        age_from, age_to, *city_name = request.split()
-        age_from = int(age_from)
-        age_to = int(age_to)
-        city_name = ' '.join(city_name)
-        city_id, city_name_db = vk_item_main.database_getCities(city_name)
-        print(age_from, age_to, city_name_db)
-        if age_from not in range(0, 125) or age_to not in range(0, 125):
-            print('<Возраст вне диапазона>')
-            raise
-    except:
-        print('--ошибка--'*5)
-        return False
+def get_query_data(request):
+    """Обработка поступивших поисковых данных от пользователя для формирования запроса на поиск"""
+    sex_, age_from_, age_to_, city = re.search(pattern, request, re.I).groups()
+    sex = 2 if sex_[:1] == 'м' else 1
+    age_from, age_to = list(map(int, [age_from_, age_to_]))
     if age_from > age_to:
         age_from, age_to = age_to, age_from
-    return {'age_from': age_from, 'age_to': age_to, 'city': city_id}
+    print('query_data', {'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city})
+    return {'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city}
+
+def get_skip_id(user_id, users_in_db):
+    if user_id in users_in_db:
+        # TODO если user_id есть в БД, получить всех id_candidates этого user в переменную skip_id (формат set)
+        skip_id = set()  # сюда из БД добавляем кандидатов, которых нужно будет пропускать при поиске
+    else:
+        skip_id = set()  # оставляем пустым для тех, кто юзеров, кто еще не в БД
+    return skip_id
 
 def next_candidate(cand):
     """Формирует и отправлет информацию о кандидате в БД и пользователю"""
-
-    # TODO Записать в БД
+    # TODO Записать в БД, что кандидат просмотрен
     cand_data = next(cand)
     msg = f"{cand_data['first_name']} {cand_data['last_name']}\n" \
           f"{cand_data['bdate']}\n" \
@@ -82,10 +86,8 @@ def next_candidate(cand):
 
 
 # TODO Select из БД списка юзеров в переменную users_in_db -->set
-users_in_db = {999, 888, 7413785340}
+users_in_db = set() # должны быть подгружены данные из БД
 
-
-flag = False
 for event in longpoll.listen():
     if event.type == VkEventType.MESSAGE_NEW and event.to_me:
         request = event.text
@@ -95,56 +97,39 @@ for event in longpoll.listen():
 
         if request == search_button_text:
             kb = VkKeyboard(inline=True)
-            create_button(male_button_text, 'blue')
-            create_button(female_button_text, 'red')
-            send_msg(user_id, 'Отлично! Поехали.\nКого будем искать (нажмите кнопку)?', kb)
+            send_msg(user_id, search_query_text)
             continue
-        if request in (male_button_text, female_button_text):
-            # создаем форму для заполнения в БД и вносим первые данные: id и sex:
-            query_info = {'user_id': user_id}
-            query_info['sex'] = 2 if request == male_button_text else 1
-            print('query_info: ', query_info)
-            send_msg(user_id, search_age_city_text)
-            for event in longpoll.listen():
-                if event.type == VkEventType.MESSAGE_NEW and event.to_me and user_id == event.user_id:
-                    request = event.text
-                    age_city_dict = get_age_city_data(request)
-                    if age_city_dict:
-                        query_info = {**query_info, **age_city_dict}
-                        print(query_info)
-                        #добавляем user в текущую переменную, чтобы понимать, что...
-                        #TODO в идеале это надо делать одновременно (сразу после) и не вносить самому,
-                        # а запрос из БД на обновление
-                        # т.е по сути не надо проверять, а сначала добавить в базу запрос и результаты поиска
-                        if user_id not in users_in_db:
-                            users_in_db.add(user_id)
-                            print(users_in_db)
-                        #TODO загнать в функцию, т.к. понадобится может при дальнейшем поиске
-                        #поиск кандиатов и их фото, и выдача первого кандидата
-                        candidates = vk_item_main.users_search(**query_info)
-                        print('-->candidates - 3', candidates[:3])
-                        kb = VkKeyboard(inline=True)
-                        create_button(search_button_text, 'blue')
-                        create_button('Следующий', 'white')
-                        create_button('В избранное', 'green')
-                        create_button('Список', 'green')
-                        create_button(quit_button_text, 'red')
-                        cand = iter(candidates)
-                        # cand_data = next(cand)
-                        next_candidate(cand)
-                        flag = True
-                        break
+        # получили поисковые данные и ищем по ним
+        if re.search(pattern, request, re.I):
+            query_data = get_query_data(request)
+            skip_id = get_skip_id(user_id, users_in_db)
+            candidates = vk_item_main.users_search(skip_id, **query_data)
+            print('-->candidates - 1', candidates[:1])
+            if candidates:
+                if user_id not in users_in_db:
+                    users_in_db.add(user_id)
 
-                    else:
-                        send_msg(user_id, 'Некорректные данные')
-        if flag == True:
-            flag = False
-            continue
+                kb = VkKeyboard(inline=True)
+                create_button(search_button_text, 'blue')
+                create_button('Следующий', 'white')
+                create_button('В избранное', 'green')
+                create_button('Список', 'green')
+                create_button(quit_button_text, 'red')
+
+                cand = iter(candidates)
+                next_candidate(cand)
+                continue
+            else:
+                send_msg(user_id, 'По указанным данным ничего не найдено.\n'
+                                  'Попробуйте снова. Пример формата ввода:\nж 25 30 Киров')
+                continue
         if request == 'Следующий':
             try:
                 next_candidate(cand)
             except NameError:
                 send_msg(user_id, "Нужно поискать. Нажмите 'Поиск'")
+            except StopIteration:
+                send_msg(user_id, "А ведь больше нет. Нажмите 'Поиск', если хотите еще кого-нибудь поискать")
             continue
         if request == 'В избранное':
             # TODO Записать в БД из переменной cand_data

@@ -11,27 +11,10 @@ class VkRequest:
             'v': vk_version
         }
 
-    def database_getCities(self, city_name):
-        """Получает список идентификаторов городов"""
-        method = 'database.getCities'
-        database_getCities_url = self.url_base + method
-        # city_name = city_name.title()
-        database_getCities_params = {
-            'country_id': 1,
-            'q': city_name,
-            'count': 1
-        }
-        print('________', database_getCities_params)
-        res = requests.get(database_getCities_url, params={**self.params, **database_getCities_params}).json()
-        if res['response']['count'] and res['response']['items'][0]['title'].lower() == city_name.lower():
-            print(res['response']['items'][0])
-            return res['response']['items'][0]['id'], res['response']['items'][0]['title']
-        else:
-            return None
 
     def users_search(self, skip_id={}, **kwargs) -> list:
-        """Формирует список словарей
-            [{'vk_id': id, 'first_name': first_name, 'last_name': last_name, 'bdate': bdate}] кандидатов"""
+        """Формирует список словарей c данными кандидатов
+            [{'vk_id': id, 'first_name': first_name, 'last_name': last_name, 'bdate': bdate, attach : photo}]"""
         method = 'users.search'
         users_search_url = self.url_base + method
         users_search_params = {
@@ -42,6 +25,7 @@ class VkRequest:
             'fields': 'bdate',
             **kwargs
         }
+        print(users_search_params)
         res = requests.get(users_search_url, params={**self.params, **users_search_params}).json()
         print('count=', res['response']['count'])
         candidates = []
