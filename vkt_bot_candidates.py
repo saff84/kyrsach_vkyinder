@@ -1,7 +1,6 @@
 import requests
-from pprint import pprint
 import time
-from vkt_bot_config import token, vk_version
+
 
 class VkRequest:
     url_base = 'https://api.vk.com/method/'
@@ -55,8 +54,8 @@ class VkRequest:
                                    "bdate": item['bdate'],
                                    **photos
                                    })
-                time.sleep(0.34)
-        # pprint(candidates[0:3])
+                time.sleep(0.25)
+        # pprint(candidates[:1])
         return candidates
 
     def get_photos(self, id) -> dict:
@@ -70,21 +69,14 @@ class VkRequest:
             'count': 300
         }
         res = requests.get(get_photos_url, params={**self.params, **get_photos_params}).json()
-
+        print(id)
         # если не нашли/мало нашли в альбоме 'profile', ищем в 'wall'
         photo_list = res['response']['items']
         if res['response']['count'] < 3 and get_photos_params['album_id'] == 'profile':
             get_photos_params['album_id'] = 'wall'
             res2 = requests.get(get_photos_url, params={**self.params, **get_photos_params}).json()
             photo_list += res2['response']['items']
-        attach = {'attach': [f"photo{p['owner_id']}_{p['id']}" \
-                             for p in sorted(photo_list, key=lambda d: d['likes']['count'], reverse=True)][:3]}
-        print('attach', id, attach)
-        return attach
-
-
-
-
-
-
-
+        photos = {'attach': ','.join([f"photo{p['owner_id']}_{p['id']}" \
+                                      for p in sorted(photo_list, key=lambda d: d['likes']['count'], reverse=True)][
+                                     :3])}
+        return photos

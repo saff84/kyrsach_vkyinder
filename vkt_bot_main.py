@@ -23,7 +23,6 @@ female_button_text = 'Женщину хочу'
 
 # club_url = 'https://vk.com/club214720213'
 
-# vk = vk_api.VkApi(token=token)
 vk = VkApiGroup(token=token_bot)
 longpoll = VkLongPoll(vk)
 print('<Бот стартовал>')
@@ -34,12 +33,12 @@ def send_msg(user_id, message, keyboard=None, attachment=None):
     if keyboard:
         params['keyboard'] = keyboard.get_keyboard()
     if attachment:
-        params['attachment'] = ','.join(attachment)
-        print(params['attachment'])
+        params['attachment'] = attachment
+        print('attachment', params['attachment'])
 
     vk.method('messages.send', params)
-    pprint(params)
-    print(f'< to user_id = {user_id} отправлено сообщение> {message}')
+    # pprint(params)
+    # print(f'< to user_id = {user_id} отправлено сообщение> {message}')
 
 def get_user_info(user_id):
     return vk.method('users.get', {'user_ids': user_id, 'fields': 'sex, city, bdate'})[0]
@@ -85,9 +84,6 @@ def next_candidate(cand):
 # TODO Select из БД списка юзеров в переменную users_in_db -->set
 users_in_db = {999, 888, 7413785340}
 
-
-# user_id = 0
-# query_info = {'user_id': user_id}
 
 flag = False
 for event in longpoll.listen():
