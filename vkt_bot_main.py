@@ -5,6 +5,7 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from vkt_bot_candidates import VkRequest
 from vkt_bot_config import token, token_bot, vk_version
 import re
+from db import db_main
 
 # club_url = 'https://vk.com/club214720213'
 vk_search = VkRequest(token, vk_version, count_search=5)
@@ -78,10 +79,14 @@ def new_search(request, offset, user_id, users_in_db):
     """Отрабатывает новый поиск"""
     print('<Отрабатывает новый поиск>')
     query_data = get_query_data(request, offset[user_id])
+    db_main.add_botuser(query_data,user_id)       # --------> добавление в бд ботюзер
     send_msg(user_id, f'...Идет поиск: ')
     skip_id = get_skip_id(user_id, users_in_db)
     candidates = {user_id: vk_search.users_search(skip_id, **query_data)}
+    print('-->candidates', candidates)
+    print('-->candidates', candidates[user_id])
     print('-->candidates - 1', candidates[user_id][:1])
+    db_main.add_candidates(candidates[user_id], user_id)   # --------> добавление в бд кандидатов для user_id
     return candidates
 
 def next_candidate(cand):

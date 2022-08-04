@@ -2,6 +2,7 @@ import requests
 import time
 
 
+
 class VkRequest:
     url_base = 'https://api.vk.com/method/'
 
@@ -39,6 +40,7 @@ class VkRequest:
                                    **photos
                                    })
                 time.sleep(0.25)
+
         # pprint(candidates[:1])
         return candidates
 
