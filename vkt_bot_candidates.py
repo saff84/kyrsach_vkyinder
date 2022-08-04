@@ -5,11 +5,12 @@ import time
 class VkRequest:
     url_base = 'https://api.vk.com/method/'
 
-    def __init__(self, token, vk_version):
+    def __init__(self, token, vk_version, count_search):
         self.params = {
             'access_token': token,
             'v': vk_version
         }
+        self.count_search = count_search        # количество возвращаемых пользователей при поиске
 
 
     def users_search(self, skip_id={}, **kwargs) -> list:
@@ -19,9 +20,8 @@ class VkRequest:
         users_search_url = self.url_base + method
         users_search_params = {
             'has_photo': 1,
-            'status': 6,
-            'count': 10,
-            'offset': 0,
+            'status': 1,
+            'count': self.count_search,
             'fields': 'bdate',
             **kwargs
         }
