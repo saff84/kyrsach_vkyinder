@@ -14,7 +14,7 @@ token_bot = config_db["VK"]["token_bot"]
 vk_version = config_db["VK"]["vk_version"]
 
 # club_url = 'https://vk.com/club214720213'
-vk_search = VkRequest(token, vk_version, count_search=4)
+vk_search = VkRequest(token, vk_version, count_search=5)
 PATTERN = r'^([мж]|муж[.скойчина]{0,4}|жен[.скийщна]{0,4})[\s,]{1,2}' \
           r'(\d{2,3})[ ,-]+' \
           r'(\d{2,3})[ ,]+' \
@@ -61,7 +61,7 @@ def get_query_data(request, offset):
         print('in get_query_data_if_next', offset)
         # TODO SELECT из таблицы юзера (первая таблица) в переменную request_from_db в формате
         # {'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city}}
-        request_from_db = {} # заменить {} на данные из БД
+        request_from_db = db_main.get_search_parametrs(user_id) #------> запрос поисковых параметров в БД если ботюзер уже есть
         query_data = {**request_from_db, 'offset': offset}
 
     else:
@@ -80,7 +80,7 @@ def get_skip_id(user_id, users_in_db) -> set:
     if user_id in users_in_db:
         # TODO 1)если user_id есть в БД (функция проверки),
         #  то 2) получить всех id_candidates этого user в переменную skip_id (формат set)
-        skip_id = set()  # сюда из БД добавляем кандидатов, которых нужно будет пропускать при поиске
+        skip_id = db_main.get_all_id_candidates(user_id)  # сюда из БД добавляем кандидатов, которых нужно будет пропускать при поиске
     else:
         skip_id = set()  # оставляем пустым для тех, кто юзеров, кто еще не в БД
     return skip_id
@@ -107,6 +107,7 @@ def next_candidate(user_id):
           f"https://vk.com/id{cand_data['vk_id']}\n"
     send_msg(user_id, msg, kb, cand_data['attach'])
     # TODO UPDATE в 3 табл - Viewed-пометка в 3 табл = True
+    db_main.candidate_viewed(cand_data['vk_id'], user_id)
     return cand_data['vk_id']
 
 
@@ -121,7 +122,8 @@ def set_buttons(num=None):
 
 
 # TODO Select из БД списка юзеров в переменную users_in_db -->set
-users_in_db = set()  # должны быть подгружены данные из БД
+users_in_db = db_main.get_users_in_db()  # ------> селект всех ботюзеров из БД в виде vk_id
+print(users_in_db)
 offset = {}
 last_cand = {}
 
