@@ -13,11 +13,11 @@ token = config_db["VK"]["token"]
 token_bot = config_db["VK"]["token_bot"]
 vk_version = config_db["VK"]["vk_version"]
 
-vk_search = VkRequest(token, vk_version, count_search=6)
+vk_search = VkRequest(token, vk_version, count_search=7)
 PATTERN = r'^([мж]|муж[.скойчина]{0,4}|жен[.скийщна]{0,4})[\s,]{1,2}' \
           r'(\d{2,3})[ ,-]+' \
           r'(\d{2,3})[ ,]+' \
-          r'([а-яё]{2,}(?:[ -]*\w+){2})\s*$'
+          r'([а-яё]{2,}(?:[ -]*\w+){,2})\s*$'
 
 # Названия кнопок (они же - команды)
 SEARCH_BUTTON_TEXT = 'Поиск'
@@ -39,7 +39,7 @@ def send_msg(user_id, message, keyboard=None, attachment=None):
     if attachment:
         params['attachment'] = attachment
     vk.method('messages.send', params)
-    print(f'< to user_id = {user_id} отправлено сообщение> {message}')
+    print(f'<to user_id = {user_id} -- Отправлено сообщение> {message}>')
 
 
 def get_user_info(user_id):
@@ -57,11 +57,7 @@ def create_button(text, color):
 def get_query_data(request, offset):
     """Обработка поступивших поисковых данных от пользователя для формирования запроса на поиск"""
     if request == NEXT_BUTTON_TEXT:
-        print('in get_query_data_if_next', offset)
-        # SELECT из таблицы юзера (первая таблица) в переменную request_from_db в формате
-        # {'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city}}
-        request_from_db = db_main.get_search_parameters(user_id) #-> запрос поисковых параметров в БД если ботюзер уже есть
-        print('request_from_db', request_from_db)
+        request_from_db = db_main.get_search_parameters(user_id)  # -> запрос поисковых параметров в БД
         query_data = {**request_from_db, 'offset': offset}
 
     else:
@@ -71,7 +67,6 @@ def get_query_data(request, offset):
         if age_from > age_to:
             age_from, age_to = age_to, age_from
         query_data = {'offset': offset, 'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city}
-    print('query_data', query_data)
     return query_data
 
 
@@ -86,29 +81,21 @@ def get_skip_id(user_id, users_in_db) -> set:
 
 def new_search(request, offset, user_id, users_in_db):
     """Отрабатывает новый поиск"""
-    print('<Отрабатывает новый поиск>')
-    print('request, offset', request, offset[user_id])
     query_data = get_query_data(request, offset[user_id])
-    print('request, offset', query_data)
-    print('query_data-start', query_data)
     send_msg(user_id, f'...Идет поиск ')
     skip_id = get_skip_id(user_id, users_in_db)
     candidates = {user_id: vk_search.users_search(skip_id, **query_data)}
-    print('-->candidates - 1', candidates[user_id][:1])
     return candidates, query_data
 
 
 def next_candidate(user_id):
     """Формирует и отправлет информацию о кандидате в БД и пользователю"""
-    print('in next_candidate', user_id)
     cand_data = db_main.get_next_candidate(user_id)
-    print('cand_data', cand_data)
     msg = f"{cand_data['first_name']} {cand_data['last_name']}\n" \
           f"{cand_data['bdate']}\n" \
           f"https://vk.com/id{cand_data['vk_id']}\n"
     send_msg(user_id, msg, kb, cand_data['attach'])
-    # Viewed-пометка в 3 табл = True
-    db_main.candidate_viewed(cand_data['vk_id'], user_id)
+    db_main.candidate_viewed(cand_data['vk_id'], user_id)  # -> пометка в БД, что кандидат просмотрен
     return cand_data['vk_id']
 
 
@@ -122,8 +109,7 @@ def set_buttons(num=None):
     create_button(QUIT_BUTTON_TEXT, 'red')
 
 
-users_in_db = db_main.get_users_in_db()  # ------> селект всех ботюзеров из БД в виде vk_id
-print(users_in_db)
+users_in_db = db_main.get_users_in_db()  # -> vk_id всех юзеров, присутствующих в БД
 offset = {}
 last_cand = {}
 
@@ -131,7 +117,7 @@ for event in longpoll.listen():
     if event.type == VkEventType.MESSAGE_NEW and event.to_me:
         request = event.text
         user_id = event.user_id
-        print(f'<from user_id = {user_id} Получено сообщение>', request)
+        print(f'<from user_id = {user_id} -- Получено сообщение>', request)
         user_name = get_user_info(user_id)['first_name']
 
         if request == SEARCH_BUTTON_TEXT:
@@ -145,17 +131,13 @@ for event in longpoll.listen():
             offset[user_id] = 0
             candidates, query_data = new_search(request, offset, user_id, users_in_db)
             if candidates[user_id]:
-                print('----candidates[user_id]!!!', candidates[user_id])
                 if user_id not in users_in_db:
                     users_in_db.add(user_id)
                     db_main.add_botuser(query_data, user_id)  # -> добавление to botuser db
                 else:
-                    ('--Новый запрос--')
                     db_main.update_botuser(query_data, user_id)  # -> UPDATE данных нового запроса to botuser db
-                    if db_main.check_unviewed(user_id): # -> если непросмотренные в предыдущем поиске
-                        print('--Однако есть еще непросмотренные--')
-                        db_main.delete_unviewed(user_id) # -> DELETE непросмотренных из предыдущего поиска
-                print('before add_candidates')
+                    if db_main.check_unviewed(user_id):  # -> если непросмотренные в предыдущем поиске
+                        db_main.delete_unviewed(user_id)  # -> DELETE непросмотренных из предыдущего поиска
                 db_main.add_candidates(candidates[user_id], user_id)  # --> добавление в candidate db
                 kb = VkKeyboard(inline=True)
                 set_buttons('full')
@@ -167,7 +149,6 @@ for event in longpoll.listen():
                 continue
         if request == NEXT_BUTTON_TEXT:
             try:
-                print('-->in try')
                 last_cand[user_id] = next_candidate(user_id)
             except NameError:
                 send_msg(user_id, "Нужно поискать. Нажмите 'Поиск'")
@@ -178,20 +159,15 @@ for event in longpoll.listen():
                 if candidates[user_id]:
                     db_main.add_candidates(candidates[user_id], user_id)  # --> добавление в candidate db
                     last_cand[user_id] = next_candidate(user_id)
-                    print(last_cand)
                 else:
                     send_msg(user_id, "А ведь больше нет. Нажмите 'Поиск', если хотите еще кого-нибудь поискать")
                 continue
             continue
         if request == TO_FAVORITES_BUTTON_TEXT:
-            try:
-                if user_id in last_cand:
-                    print(f'last_cand[user_id]', last_cand[user_id])
-                    db_main.candidate_to_favorite(user_id, last_cand[user_id])
-                    send_msg(user_id, "Добавлено в избранное")
-                else:
-                    print('Нет никого для занесения')
-            except NameError:
+            if user_id in last_cand:
+                db_main.candidate_to_favorite(user_id, last_cand[user_id])
+                send_msg(user_id, "Добавлено в избранное")
+            else:
                 send_msg(user_id, "Пока некого заносить в избранное. Нажмите 'Поиск'")
             continue
         if request == LIST_BUTTON_TEXT:

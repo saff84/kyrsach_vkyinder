@@ -57,7 +57,6 @@ def add_candidates(candidates, user_id):
 
 
 def get_search_parameters(user_id):
-
     botuser = session.query(BotUser).filter(
         BotUser.user_vk_id == user_id).scalar()
 
@@ -68,7 +67,6 @@ def get_search_parameters(user_id):
 
 
 def get_users_in_db():
-
     list_vk_id_all_botuser = list(session.query(BotUser.user_vk_id))
     set_vk_id_all_botuser = set()
     for el in range(len(list_vk_id_all_botuser)):
@@ -77,9 +75,7 @@ def get_users_in_db():
     return set_vk_id_all_botuser
 
 
-
 def get_all_id_candidates(user_id):
-
     list_all_candidates_for_botuser = list(
         session.query(
             Variants.id_candidate).filter(
@@ -143,8 +139,8 @@ def delete_unviewed(user_id):
     result = session.query(Variants.id_candidate). \
         join(subq, Variants.id_candidate == subq.c.id_candidate). \
         filter(and_(
-            Variants.id_botuser == user_id,
-            Variants.viewed == False))
+        Variants.id_botuser == user_id,
+        Variants.viewed == False))
     unviewed_id = [el[0] for el in result]
 
     # удаляет всех непросмотренных у данного пользователя
