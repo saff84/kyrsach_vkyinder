@@ -31,17 +31,6 @@ def add_botuser(query_info, user_id):
     session.commit()
 
 
-def update_botuser(query_info, user_id):
-    botuser = {'age_on': query_info['age_from'],
-               'age_to': query_info['age_to'],
-               'pol': query_info['sex'],
-               'city': query_info['hometown']
-               }
-    session.query(BotUser).filter(
-        BotUser.user_vk_id == user_id).update(botuser)
-    session.commit()
-
-
 def add_candidates(candidates, user_id):
     for el in candidates:
         candidate = Candidate(vk_id=el['vk_id'],
@@ -66,51 +55,11 @@ def add_candidates(candidates, user_id):
         session.add(variants)
         session.commit()
 
+# TODO не работает
+#  и можно убрать if else
+def get_search_parameters(user_id):
 
-def get_next_candidate(user_id):
-    cand = session.query(Candidate).join(Variants.candidate).filter(Variants.id_botuser == user_id).filter(
-            Variants.viewed == False)[0]
-    return {'vk_id': cand.vk_id,
-            'first_name': cand.candidate_firstname,
-            'last_name': cand.candidate_lastname,
-            'bdate': cand.candidate_bdate,
-            'attach': cand.candidate_fots
-            }
-
-def check_unviewed(user_id):
-    """Проверяет, есть ли у пользователя непросмотренные кандидаты"""
-
-    return session.query(exists().where(and_(
-                                            Variants.id_botuser == user_id,
-                                            Variants.viewed == False))).scalar()
-
-def delete_unviewed(user_id):
-    """Удаляет непросмотренных кандидатов (из неактуального поиска)"""
-
-    subq = session.query(Variants.id_candidate, func.count(Variants.id_candidate)).\
-                    group_by(Variants.id_candidate).\
-                    having(func.count(Variants.id_candidate) < 2).subquery()
-
-    result = session.query(Variants.id_candidate).\
-                        join(subq, Variants.id_candidate == subq.c.id_candidate).\
-                        filter(and_(
-                                    Variants.id_botuser == user_id,
-                                    Variants.viewed == False))
-    unviewed_id = [el[0] for el in result]
-
-    # удаляет всех непросмотренных у данного пользователя
-    session.query(Variants).filter(and_(
-                                    Variants.id_botuser == user_id,
-                                    Variants.viewed == False)).delete()
-    # удаляет всех непросмотренных из таблицы Candidate, если этих кандидатов нет у других пользователей
-    session.query(Candidate).filter(Candidate.vk_id.in_(unviewed_id)).delete()
-
-
-    session.commit()
-
-def get_search_parametrs(user_id):
-
-    botuser = session.query(BotUser).filter(BotUser.user_vk_id == user_id).one()
+    botuser = session.query(BotUser).filter(BotUser.user_vk_id == user_id)
 
     if botuser:
         return {'sex': botuser.pol,
@@ -129,15 +78,88 @@ def get_users_in_db():
 
     return set_vk_id_all_botuser
 
-
+# TODO не работает (Candidate.id нет такого поля, join BotUser не нужен, похожая реализация в get_next_candidate)
 def get_all_id_candidates(user_id):
 
-    return set(session.query(Candidate.id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id))
+    # return set(session.query(Candidate.id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id))
+    return set(session.query(Candidate.vk_id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id).all())
+
 
 def candidate_viewed(cand_id, user_id):
     session.query(Variants).filter(Variants.id_botuser == user_id, Variants.id_candidate == cand_id).update({'viewed': True})
     session.commit()
 
+
+def update_botuser(query_info, user_id):
+    """Сохраняет новые параметры запроса пользователя"""
+
+    botuser = {'age_on': query_info['age_from'],
+               'age_to': query_info['age_to'],
+               'pol': query_info['sex'],
+               'city': query_info['hometown']
+               }
+    session.query(BotUser).filter(
+        BotUser.user_vk_id == user_id).update(botuser)
+    session.commit()
+
+
+def get_next_candidate(user_id):
+    """Получает данные по кандидату, которого отдаем для просмотра юзеру"""
+
+    cand = session.query(Candidate).join(Variants.candidate).filter(Variants.id_botuser == user_id).filter(
+        Variants.viewed == False)[0]
+    return {'vk_id': cand.vk_id,
+            'first_name': cand.candidate_firstname,
+            'last_name': cand.candidate_lastname,
+            'bdate': cand.candidate_bdate,
+            'attach': cand.candidate_fots
+            }
+
+
+def check_unviewed(user_id):
+    """Проверяет, есть ли у пользователя непросмотренные кандидаты"""
+
+    return session.query(exists().where(and_(
+                                            Variants.id_botuser == user_id,
+                                            Variants.viewed == False))).scalar()
+
+
+def delete_unviewed(user_id):
+    """Удаляет непросмотренных кандидатов (из неактуального поиска)"""
+
+    subq = session.query(Variants.id_candidate, func.count(Variants.id_candidate)). \
+        group_by(Variants.id_candidate). \
+        having(func.count(Variants.id_candidate) < 2).subquery()
+
+    result = session.query(Variants.id_candidate). \
+        join(subq, Variants.id_candidate == subq.c.id_candidate). \
+        filter(and_(
+                    Variants.id_botuser == user_id,
+                    Variants.viewed == False))
+    unviewed_id = [el[0] for el in result]
+
+    # удаляет всех непросмотренных у данного пользователя
+    session.query(Variants).filter(and_(
+                                        Variants.id_botuser == user_id,
+                                        Variants.viewed == False)).delete()
+    # удаляет всех непросмотренных из таблицы Candidate, если этих кандидатов нет у других пользователей
+    session.query(Candidate).filter(Candidate.vk_id.in_(unviewed_id)).delete()
+
+    session.commit()
+
+def candidate_to_favorite(user_id, vk_id):
+    session.query(Variants).filter(and_(
+                                    Variants.id_candidate == vk_id,
+                                    Variants.id_botuser == user_id)).update({'loved': True})
+    session.commit()
+
+def get_favorites_list(user_id):
+    res = session.query(Candidate).join(Variants.candidate).filter(and_(
+                                    Variants.id_botuser == user_id),
+                                    Variants.loved).all()
+    favorites_list = ''.join([f"{el.candidate_firstname} {el.candidate_lastname}, "
+                              f"{el.candidate_bdate}, https://vk.com/id{el.vk_id}\n" for el in res])
+    return favorites_list
 
 session.close()
 

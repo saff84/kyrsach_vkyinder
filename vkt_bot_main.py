@@ -60,7 +60,7 @@ def get_query_data(request, offset):
         print('in get_query_data_if_next', offset)
         # SELECT из таблицы юзера (первая таблица) в переменную request_from_db в формате
         # {'sex': sex, 'age_from': age_from, 'age_to': age_to, 'hometown': city}}
-        request_from_db = db_main.get_search_parametrs(user_id) #------> запрос поисковых параметров в БД если ботюзер уже есть
+        request_from_db = db_main.get_search_parameters(user_id) #-> запрос поисковых параметров в БД если ботюзер уже есть
         print('request_from_db', request_from_db)
         query_data = {**request_from_db, 'offset': offset}
 
@@ -78,10 +78,7 @@ def get_query_data(request, offset):
 def get_skip_id(user_id, users_in_db) -> set:
     """Формирует список id кандидатов, которые не должны попадаться при поиске"""
     if user_id in users_in_db:
-        # TODO 1)если user_id есть в БД (функция проверки),
-
-        #  получить всех id_candidates этого user в переменную skip_id (формат set)
-        skip_id = db_main.get_all_id_candidates(user_id)  # сюда из БД добавляем кандидатов, которых нужно будет пропускать при поиске
+        skip_id = db_main.get_all_id_candidates(user_id)  # кандидаты, которых нужно будет пропускать при поиске
     else:
         skip_id = set()  # оставляем пустым для тех, кто юзеров, кто еще не в БД
     return skip_id
@@ -103,6 +100,7 @@ def new_search(request, offset, user_id, users_in_db):
 
 def next_candidate(user_id):
     """Формирует и отправлет информацию о кандидате в БД и пользователю"""
+    print('in next_candidate', user_id)
     cand_data = db_main.get_next_candidate(user_id)
     print('cand_data', cand_data)
     msg = f"{cand_data['first_name']} {cand_data['last_name']}\n" \
@@ -152,10 +150,12 @@ for event in longpoll.listen():
                     users_in_db.add(user_id)
                     db_main.add_botuser(query_data, user_id)  # -> добавление to botuser db
                 else:
+                    ('--Новый запрос--')
                     db_main.update_botuser(query_data, user_id)  # -> UPDATE данных нового запроса to botuser db
                     if db_main.check_unviewed(user_id): # -> если непросмотренные в предыдущем поиске
                         print('--Однако есть еще непросмотренные--')
                         db_main.delete_unviewed(user_id) # -> DELETE непросмотренных из предыдущего поиска
+                print('before add_candidates')
                 db_main.add_candidates(candidates[user_id], user_id)  # --> добавление в candidate db
                 kb = VkKeyboard(inline=True)
                 set_buttons('full')
@@ -184,19 +184,20 @@ for event in longpoll.listen():
                 continue
             continue
         if request == TO_FAVORITES_BUTTON_TEXT:
-            # TODO Поставить галку в Избранном (3-я табл), id_candidate - из переменной last_cand[user_id]
             try:
-                if last_cand[user_id]:
-                    send_msg(user_id, "Кнопка сломана. Пока не получится добавить. Работаем над этим.")
+                if user_id in last_cand:
+                    print(f'last_cand[user_id]', last_cand[user_id])
+                    db_main_MOD.candidate_to_favorite(user_id, last_cand[user_id])
+                    send_msg(user_id, "Добавлено в избранное")
+                else:
+                    print('Нет никого для занесения')
             except NameError:
                 send_msg(user_id, "Пока некого заносить в избранное. Нажмите 'Поиск'")
             continue
         if request == LIST_BUTTON_TEXT:
-            # TODO Выдать из БД список в переменную
-            #  и Заменить if (ниже) (т.к. пока затычка) на : "if переменная с данными от этого пользователя"
-            if user_id in users_in_db:
-                print('<Список будет позже>')
-                send_msg(user_id, "Список избранных разработчиком пока не реализован. Довольствуйтесь тем, что еть.'")
+            favorites_list = db_main_MOD.get_favorites_list(user_id)
+            if favorites_list:
+                send_msg(user_id, favorites_list)
             else:
                 send_msg(user_id, "К огромному сожалению, у вас пока нет никого в избранном.'")
             continue
