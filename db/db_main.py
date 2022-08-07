@@ -55,38 +55,47 @@ def add_candidates(candidates, user_id):
         session.add(variants)
         session.commit()
 
-# TODO не работает
-#  и можно убрать if else
+
 def get_search_parameters(user_id):
 
-    botuser = session.query(BotUser).filter(BotUser.user_vk_id == user_id)
+    botuser = session.query(BotUser).filter(
+        BotUser.user_vk_id == user_id).scalar()
 
-    if botuser:
-        return {'sex': botuser.pol,
+    return {'sex': botuser.pol,
             'age_from': botuser.age_on,
             'age_to': botuser.age_to,
             'hometown': botuser.city}
-    else:
-        pass
+
 
 def get_users_in_db():
 
     list_vk_id_all_botuser = list(session.query(BotUser.user_vk_id))
-    set_vk_id_all_botuser  = set()
+    set_vk_id_all_botuser = set()
     for el in range(len(list_vk_id_all_botuser)):
         set_vk_id_all_botuser.add(list_vk_id_all_botuser[el][0])
 
     return set_vk_id_all_botuser
 
-# TODO не работает (Candidate.id нет такого поля, join BotUser не нужен, похожая реализация в get_next_candidate)
+
+
 def get_all_id_candidates(user_id):
 
-    # return set(session.query(Candidate.id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id))
-    return set(session.query(Candidate.vk_id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id).all())
+    list_all_candidates_for_botuser = list(
+        session.query(
+            Variants.id_candidate).filter(
+            Variants.id_botuser == user_id))
+
+    set_all_candidates_for_botuser = set()
+    for el in range(len(list_all_candidates_for_botuser)):
+        set_all_candidates_for_botuser.add(
+            list_all_candidates_for_botuser[el][0])
+
+    return set_all_candidates_for_botuser
 
 
 def candidate_viewed(cand_id, user_id):
-    session.query(Variants).filter(Variants.id_botuser == user_id, Variants.id_candidate == cand_id).update({'viewed': True})
+    session.query(Variants).filter(Variants.id_botuser == user_id,
+                                   Variants.id_candidate == cand_id).update({'viewed': True})
     session.commit()
 
 
@@ -120,8 +129,8 @@ def check_unviewed(user_id):
     """Проверяет, есть ли у пользователя непросмотренные кандидаты"""
 
     return session.query(exists().where(and_(
-                                            Variants.id_botuser == user_id,
-                                            Variants.viewed == False))).scalar()
+        Variants.id_botuser == user_id,
+        Variants.viewed == False))).scalar()
 
 
 def delete_unviewed(user_id):
@@ -134,33 +143,35 @@ def delete_unviewed(user_id):
     result = session.query(Variants.id_candidate). \
         join(subq, Variants.id_candidate == subq.c.id_candidate). \
         filter(and_(
-                    Variants.id_botuser == user_id,
-                    Variants.viewed == False))
+            Variants.id_botuser == user_id,
+            Variants.viewed == False))
     unviewed_id = [el[0] for el in result]
 
     # удаляет всех непросмотренных у данного пользователя
     session.query(Variants).filter(and_(
-                                        Variants.id_botuser == user_id,
-                                        Variants.viewed == False)).delete()
-    # удаляет всех непросмотренных из таблицы Candidate, если этих кандидатов нет у других пользователей
+        Variants.id_botuser == user_id,
+        Variants.viewed == False)).delete()
+    # удаляет всех непросмотренных из таблицы Candidate, если этих кандидатов
+    # нет у других пользователей
     session.query(Candidate).filter(Candidate.vk_id.in_(unviewed_id)).delete()
 
     session.commit()
 
+
 def candidate_to_favorite(user_id, vk_id):
     session.query(Variants).filter(and_(
-                                    Variants.id_candidate == vk_id,
-                                    Variants.id_botuser == user_id)).update({'loved': True})
+        Variants.id_candidate == vk_id,
+        Variants.id_botuser == user_id)).update({'loved': True})
     session.commit()
+
 
 def get_favorites_list(user_id):
     res = session.query(Candidate).join(Variants.candidate).filter(and_(
-                                    Variants.id_botuser == user_id),
-                                    Variants.loved).all()
+        Variants.id_botuser == user_id),
+        Variants.loved).all()
     favorites_list = ''.join([f"{el.candidate_firstname} {el.candidate_lastname}, "
                               f"{el.candidate_bdate}, https://vk.com/id{el.vk_id}\n" for el in res])
     return favorites_list
 
+
 session.close()
-
-

@@ -187,7 +187,7 @@ for event in longpoll.listen():
             try:
                 if user_id in last_cand:
                     print(f'last_cand[user_id]', last_cand[user_id])
-                    db_main_MOD.candidate_to_favorite(user_id, last_cand[user_id])
+                    db_main.candidate_to_favorite(user_id, last_cand[user_id])
                     send_msg(user_id, "Добавлено в избранное")
                 else:
                     print('Нет никого для занесения')
@@ -195,7 +195,7 @@ for event in longpoll.listen():
                 send_msg(user_id, "Пока некого заносить в избранное. Нажмите 'Поиск'")
             continue
         if request == LIST_BUTTON_TEXT:
-            favorites_list = db_main_MOD.get_favorites_list(user_id)
+            favorites_list = db_main.get_favorites_list(user_id)
             if favorites_list:
                 send_msg(user_id, favorites_list)
             else:
