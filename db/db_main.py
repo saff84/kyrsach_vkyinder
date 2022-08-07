@@ -1,5 +1,7 @@
 import sqlalchemy
+from sqlalchemy import and_, func
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import exists
 from db.bd_tables import create_tables, BotUser, Candidate, Variants
 import configparser
 
@@ -19,7 +21,6 @@ session = Session()
 
 
 def add_botuser(query_info, user_id):
-    # for el in query_info:
     botuser = BotUser(user_vk_id=user_id,
                       age_on=query_info['age_from'],
                       age_to=query_info['age_to'],
@@ -36,7 +37,8 @@ def update_botuser(query_info, user_id):
                'pol': query_info['sex'],
                'city': query_info['hometown']
                }
-    session.query(BotUser).filter(BotUser.user_vk_id == user_id).update(botuser)
+    session.query(BotUser).filter(
+        BotUser.user_vk_id == user_id).update(botuser)
     session.commit()
 
 
@@ -51,8 +53,12 @@ def add_candidates(candidates, user_id):
         session.add(candidate)
         session.commit()
 
-        bu = session.query(BotUser.user_vk_id).filter(BotUser.user_vk_id == user_id).scalar()
-        can = session.query(Candidate.vk_id).filter(Candidate.vk_id == el['vk_id']).scalar()
+        bu = session.query(
+            BotUser.user_vk_id).filter(
+            BotUser.user_vk_id == user_id).scalar()
+        can = session.query(
+            Candidate.vk_id).filter(
+            Candidate.vk_id == el['vk_id']).scalar()
 
         variants = Variants(id_botuser=bu,
                             id_candidate=can
@@ -62,8 +68,6 @@ def add_candidates(candidates, user_id):
 
 
 def get_next_candidate(user_id):
-    # cand = session.query(Candidate).join(Variants.candidate).filter(Variants.id_botuser == user_id).filter(
-    #         Variants.viewed == False)[0]
     cand = session.query(Candidate).join(Variants.candidate).filter(Variants.id_botuser == user_id).filter(
             Variants.viewed == False)[0]
     return {'vk_id': cand.vk_id,
@@ -73,7 +77,68 @@ def get_next_candidate(user_id):
             'attach': cand.candidate_fots
             }
 
+def check_unviewed(user_id):
+    """Проверяет, есть ли у пользователя непросмотренные кандидаты"""
 
-# add_botuser(query_info,user_name)
-# add_candidates(candidates,user_id)
+    return session.query(exists().where(and_(
+                                            Variants.id_botuser == user_id,
+                                            Variants.viewed == False))).scalar()
+
+def delete_unviewed(user_id):
+    """Удаляет непросмотренных кандидатов (из неактуального поиска)"""
+
+    subq = session.query(Variants.id_candidate, func.count(Variants.id_candidate)).\
+                    group_by(Variants.id_candidate).\
+                    having(func.count(Variants.id_candidate) < 2).subquery()
+
+    result = session.query(Variants.id_candidate).\
+                        join(subq, Variants.id_candidate == subq.c.id_candidate).\
+                        filter(and_(
+                                    Variants.id_botuser == user_id,
+                                    Variants.viewed == False))
+    unviewed_id = [el[0] for el in result]
+
+    # удаляет всех непросмотренных у данного пользователя
+    session.query(Variants).filter(and_(
+                                    Variants.id_botuser == user_id,
+                                    Variants.viewed == False)).delete()
+    # удаляет всех непросмотренных из таблицы Candidate, если этих кандидатов нет у других пользователей
+    session.query(Candidate).filter(Candidate.vk_id.in_(unviewed_id)).delete()
+
+
+    session.commit()
+
+def get_search_parametrs(user_id):
+
+    botuser = session.query(BotUser).filter(BotUser.user_vk_id == user_id).one()
+
+    if botuser:
+        return {'sex': botuser.pol,
+            'age_from': botuser.age_on,
+            'age_to': botuser.age_to,
+            'hometown': botuser.city}
+    else:
+        pass
+
+def get_users_in_db():
+
+    list_vk_id_all_botuser = list(session.query(BotUser.user_vk_id))
+    set_vk_id_all_botuser  = set()
+    for el in range(len(list_vk_id_all_botuser)):
+        set_vk_id_all_botuser.add(list_vk_id_all_botuser[el][0])
+
+    return set_vk_id_all_botuser
+
+
+def get_all_id_candidates(user_id):
+
+    return set(session.query(Candidate.id).join(Variants).join(BotUser).filter(BotUser.user_vk_id == user_id))
+
+def candidate_viewed(cand_id, user_id):
+    session.query(Variants).filter(Variants.id_botuser == user_id, Variants.id_candidate == cand_id).update({'viewed': True})
+    session.commit()
+
+
 session.close()
+
+
